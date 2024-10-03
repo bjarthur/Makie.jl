@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - add vertically oriented Toggle [#4445](https://github.com/MakieOrg/Makie.jl/pull/4445)
+- For `Textbox`es in which a fixed width is specified, the text is now scrolled
+  if the width is exceeded [#4293](https://github.com/MakieOrg/Makie.jl/pull/4293)
 
 ## [0.21.14] - 2024-10-11
 
