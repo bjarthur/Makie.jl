@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Add Tooltips for blocks [#4451](https://github.com/MakieOrg/Makie.jl/pull/4451)
+- Add `unsafe_set!(::Textbox, ::String)` [#4417](https://github.com/MakieOrg/Makie.jl/pull/4417)
 - Disabled unit prefix conversions for compound units (e.g. `u"m/s"`) to avoid generating incorrect units. [#4583](https://github.com/MakieOrg/Makie.jl/pull/4583)
 - Add kwarg to rotate Toggle [#4445](https://github.com/MakieOrg/Makie.jl/pull/4445)
 - Fix orientation of environment light textures in RPRMakie [#4629](https://github.com/MakieOrg/Makie.jl/pull/4629).
