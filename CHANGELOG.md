@@ -5,6 +5,8 @@
 - Add Tooltips for blocks [#4451](https://github.com/MakieOrg/Makie.jl/pull/4451)
 - Add `unsafe_set!(::Textbox, ::String)` [#4417](https://github.com/MakieOrg/Makie.jl/pull/4417)
 
+>>>>>>> bja/blocktooltips
+
 ## [0.21.17] - 2024-12-05
 
 - Added `backend` and `update` kwargs to `show` [#4558](https://github.com/MakieOrg/Makie.jl/pull/4558)
