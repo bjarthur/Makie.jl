@@ -243,7 +243,7 @@ calculated_attributes!(plot::T) where {T} = calculated_attributes!(T, plot)
     image(x, y, image)
     image(image)
 
-Plots an image on a rectangle bounded by `x` and `y` (defaults to size of image).
+Plots an image on a rectangle bounded by the 2-tuples `x` and `y` which specify the endpoints of each axis and default to the size of image.
 """
 @recipe Image (
     x::EndPoints,
@@ -290,6 +290,8 @@ Another allowed form is using three vectors `xvector`, `yvector` and `zvector`.
 In this case it is assumed that no pair of elements `x` and `y` exists twice.
 Pairs that are missing from the resulting grid will be treated as if `zvector` had a `NaN`
     element at that position.
+
+`x` and `y` can also each be 2-tuples specifying the end points of each axis.
 
 If `x` and `y` are omitted with a matrix argument, they default to `x, y = axes(matrix)`.
 
