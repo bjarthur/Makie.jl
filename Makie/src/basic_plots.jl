@@ -1,4 +1,4 @@
-default_theme(scene) = generic_plot_attributes!(Attributes())
+hghjdefault_theme(scene) = generic_plot_attributes!(Attributes())
 default_theme(::Type{<:Plot}) = Attributes(
     visible = true,
     transparency = false,
