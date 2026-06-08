@@ -144,6 +144,31 @@ struct LogTicks{T}
 end
 
 """
+    PseudologTicks(n_ideal::Int = 5)
+
+Tick finder for axes using `Makie.pseudolog10`. Picks decade ticks (`±10ᵏ`) with a step
+chosen so that roughly `n_ideal` ticks are produced overall, anchors zero when it is in the
+visible range, and falls back to `WilkinsonTicks` when no decade fits the window.
+"""
+struct PseudologTicks
+    n_ideal::Int
+end
+PseudologTicks() = PseudologTicks(5)
+
+"""
+    SymlogTicks(n_ideal::Int = 5)
+
+Tick finder for axes using `Makie.Symlog10`. Picks decade ticks (`±10ᵏ`) outside the scale's
+linear region, anchors zero when it is in the visible range, and falls back to
+`WilkinsonTicks` inside the linear region. The `n_ideal` parameter is a soft target for the
+total number of ticks produced.
+"""
+struct SymlogTicks
+    n_ideal::Int
+end
+SymlogTicks() = SymlogTicks(5)
+
+"""
     IntervalsBetween(n::Int, mirror::Bool = true)
 
 Indicates to create n-1 minor ticks between every pair of adjacent major ticks.
@@ -1325,6 +1350,20 @@ on(menu2.selection) do selected_function
     # do something with the selected function
 end
 ```
+
+`searchable = true` adds a text box at the top of the dropdown
+that filters the visible options as the user types. The filter predicate is the
+filter attribute and defaults to a case-insensitive substring match on the
+option label.  `searchable` is only honored at construction time.  `i_selected`
+and `selection` always reference the original options, not the visible subset.
+
+```julia
+menu3 = Menu(fig[1, 1], options = ["Apple", "Apricot", "Banana", "Cherry"],
+             searchable = true, search_placeholder = "filter fruit...")
+# custom filter: prefix match instead of substring
+menu4 = Menu(fig[1, 1], options = ["sin", "sinh", "cos", "cosh"],
+             searchable = true, filter = (q, label) -> startswith(label, q))
+```
 """
 @Block Menu begin
     @attributes begin
@@ -1376,6 +1415,12 @@ end
         prompt = "Select..."
         "Speed of scrolling in large Menu lists."
         scroll_speed = 15.0
+        "If `true`, the dropdown is preceded by a text box that filters options by `filter(query, label)`. Honored only at construction time."
+        searchable = false
+        "Placeholder text for the search box when `searchable = true`."
+        search_placeholder = "Search..."
+        "Predicate `(query::String, label::String) -> Bool` deciding whether an option matches the search. Used only when `searchable = true`."
+        filter = (q, s) -> occursin(lowercase(q), lowercase(s))
     end
 end
 
@@ -1522,6 +1567,10 @@ const EntryGroup = Tuple{Any, Vector{LegendEntry}}
         linecolorrange = automatic
         "The default line style used for LineElements"
         linestyle = :solid
+        "The default line cap used for LineElements"
+        linecap = theme(scene, :linecap)
+        "The default join style used for LineElements"
+        joinstyle = theme(scene, :joinstyle)
 
         "The default marker color for MarkerElements"
         markercolor = theme(scene, :markercolor)
@@ -1665,8 +1714,9 @@ end
 end
 
 @Block Textbox begin
-    cursorindex::Observable{Int}
-    cursoranimtask
+    # `editor` exposes the embedded `EditableText` recipe so tests / advanced
+    # consumers can drive cursor and selection state directly. Internal.
+    editor::Any
     @attributes begin
         "The height setting of the textbox."
         height = Auto()
@@ -1731,7 +1781,7 @@ end
         "Restricts the allowed unicode input via is_allowed(char, restriction)."
         restriction = nothing
         "The color of the cursor."
-        cursorcolor = :transparent
+        cursorcolor = COLOR_ACCENT[]
     end
 end
 

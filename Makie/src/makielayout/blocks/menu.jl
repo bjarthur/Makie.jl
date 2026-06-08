@@ -1,8 +1,9 @@
-function _update_option_colors!(hovered, optionstrings, optionpolycolors, m)
+function _update_option_colors!(hovered, optionstrings, optionpolycolors, m, filtered_indices)
     n = length(optionstrings[])
     resize!(optionpolycolors.val, n)
     map!(optionpolycolors.val, 1:n) do idx
-        if idx == m.i_selected[]
+        global_idx = filtered_indices[][idx]
+        if global_idx == m.i_selected[]
             return m.cell_color_active[]
         elseif idx == hovered
             return m.cell_color_hover[]
@@ -45,6 +46,9 @@ end
 
 function initialize_block!(m::Menu; default = 1)
     blockscene = m.blockscene
+
+    is_searchable = m.searchable[]
+    search_text = Observable("")
 
     listheight = Observable(0.0; ignore_equal_values = true)
     # the direction is auto-chosen as up if there is too little space below and if the space below
@@ -99,21 +103,31 @@ function initialize_block!(m::Menu; default = 1)
         translate!(menuscene, t[1], new_y, t[3])
     end
 
-    optionstrings = lift(o -> optionlabel.(o), blockscene, m.options; ignore_equal_values = true)
+    optionstrings_all = lift(o -> optionlabel.(o), blockscene, m.options; ignore_equal_values = true)
+
+    filtered_indices = lift(blockscene, optionstrings_all, search_text, m.filter; ignore_equal_values = true) do strings, query, filter_fn
+        isempty(query) ? collect(eachindex(strings)) : findall(s -> filter_fn(query, s)::Bool, strings)
+    end
+
+    optionstrings = lift(blockscene, optionstrings_all, filtered_indices) do strings, idx
+        strings[idx]
+    end
 
     selected_text = lift(blockscene, m.prompt, m.i_selected; ignore_equal_values = true) do prompt, i_selected
-        if i_selected == 0
+        if i_selected == 0 || i_selected > length(optionstrings_all[])
             prompt
         else
-            optionstrings[][i_selected]
+            optionstrings_all[][i_selected]
         end
     end
 
     selectionarea = Observable(Rect2d(0, 0, 0, 0); ignore_equal_values = true)
 
     button_hovered = Observable(false)
-    selectionpoly_color = lift(blockscene, button_hovered, m.selection_cell_color_inactive,
-                               m.cell_color_hover) do hovered, inactive, hover
+    selectionpoly_color = lift(
+        blockscene, button_hovered, m.selection_cell_color_inactive,
+        m.cell_color_hover
+    ) do hovered, inactive, hover
         hovered ? to_color(hover) : to_color(inactive)
     end
     selectionpoly = poly!(
@@ -121,10 +135,76 @@ function initialize_block!(m::Menu; default = 1)
         inspectable = false
     )
     selectiontextpos = Observable(Point2f(0, 0); ignore_equal_values = true)
-    selectiontext = text!(
-        blockscene, selectiontextpos, text = selected_text, align = (:left, :center),
-        fontsize = m.fontsize, color = m.textcolor, markerspace = :data, inspectable = false
+
+    # State tracking for the in-place editor
+    displayed_string = Observable("")
+    selection_focused = Observable(false)
+
+    # Sync displayed text to current selection when closed
+    on(blockscene, selected_text; update = true) do st
+        if !m.is_open[]
+            displayed_string[] = st
+        end
+    end
+
+    # Handle menu open/close transitions
+    on(blockscene, m.is_open) do open
+        if open
+            if is_searchable
+                displayed_string[] = "" # Clear text so we start fresh with filtering
+                selection_focused[] = true
+            end
+        else
+            if is_searchable
+                selection_focused[] = false
+                search_text[] = ""
+            end
+            displayed_string[] = selected_text[]
+        end
+    end
+
+    # Pipe user keystrokes into search query
+    on(blockscene, displayed_string) do s
+        if m.is_open[] && is_searchable
+            search_text[] = s
+        end
+    end
+
+    # The in-place editable text plot
+    selectiontext = editabletext!(
+        blockscene, displayed_string;
+        position = selectiontextpos,
+        align = (:left, :center),
+        focused = selection_focused,
+        color = m.textcolor,
+        fontsize = m.fontsize,
+        cursor_color = m.textcolor,
+        space = :pixel,
+        multiline = false,
+        manage_focus = false,
+        on_submit = (text) -> begin
+            m.is_open[] = false
+        end,
     )
+    # Sync typing edits back to displayed_string
+    on(blockscene, selectiontext[1]) do t
+        if displayed_string[] != t
+            displayed_string[] = t
+        end
+    end
+
+    # A nice in-place placeholder for the search query
+    placeholder_visible = lift(blockscene, m.is_open, displayed_string) do open, s
+        return open && is_searchable && isempty(s)
+    end
+
+    placeholder_text = text!(
+        blockscene, selectiontextpos, text = m.search_placeholder, align = (:left, :center),
+        fontsize = m.fontsize,
+        color = lift(c -> to_color((c, 0.4f0)), blockscene, m.textcolor),
+        visible = placeholder_visible, inspectable = false
+    )
+    translate!(placeholder_text, 0, 0, 1)
 
     onany(blockscene, selected_text, m.fontsize, m.textpadding) do _, _, (l, r, b, t)
         bb = boundingbox(selectiontext, :data)
@@ -191,7 +271,7 @@ function initialize_block!(m::Menu; default = 1)
             BBox(0, w_bbox, h - heights_cumsum[i + 1], h - heights_cumsum[i])
         end
 
-        _update_option_colors!(0, optionstrings, optionpolycolors, m)
+        _update_option_colors!(0, optionstrings, optionpolycolors, m, filtered_indices)
         notify(optionrects)
         return
     end
@@ -225,11 +305,11 @@ function initialize_block!(m::Menu; default = 1)
                 was_inside_options[] = true
                 # we either clicked on an item or hover it
                 if _mouse_up(butt, was_pressed_options) # PRESSED
-                    m.i_selected[] = _pick_entry(mp[2], menuscene, list_y_bounds)
+                    m.i_selected[] = filtered_indices[][_pick_entry(mp[2], menuscene, list_y_bounds)]
                     m.is_open[] = false
                 else # HOVER
                     idx_hovered = _pick_entry(mp[2], menuscene, list_y_bounds)
-                    _update_option_colors!(idx_hovered, optionstrings, optionpolycolors, m)
+                    _update_option_colors!(idx_hovered, optionstrings, optionpolycolors, m, filtered_indices)
                 end
             else
                 # If not inside anymore, invalidate was_pressed
@@ -244,8 +324,14 @@ function initialize_block!(m::Menu; default = 1)
                 is_over_button = true
                 was_inside_button[] = true
                 if _mouse_up(butt, was_pressed_button) # PRESSED
-                    m.is_open[] = !m.is_open[]
                     if m.is_open[]
+                        # If searchable, clicking inside the box shouldn't close the menu,
+                        # so that the user can click to reposition the cursor/select text.
+                        if !is_searchable
+                            m.is_open[] = false
+                        end
+                    else
+                        m.is_open[] = true
                         t = translation(menuscene)[]
                         y_for_top_align = height(menuscene.viewport[]) - listheight[]
                         translate!(menuscene, t[1], y_for_top_align, t[3])
@@ -266,18 +352,10 @@ function initialize_block!(m::Menu; default = 1)
         end
 
         # clean up hovers if we're outside
-        if !is_over_options && was_inside_options[] # going from being inside to outside
-            was_inside_options[] = false
-            _update_option_colors!(0, optionstrings, optionpolycolors, m)
-        end
-        if !is_over_button && was_inside_button[]
-            was_inside_button[] = false
-            button_hovered[] = false
-        end
-        # if mouse got over anything else, we close the menu
         if !is_over_button && !is_over_options && butt.button == Mouse.left && butt.action == Mouse.press
             m.is_open[] = false
         end
+
         return Consume(false)
     end
 
